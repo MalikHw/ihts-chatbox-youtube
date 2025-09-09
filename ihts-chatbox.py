@@ -4,6 +4,7 @@ import json
 import argparse
 import sys
 from flask import Flask, render_template_string, request, jsonify
+from flask_socketio import SocketIO, emit
 import threading
 from datetime import datetime
 import re
@@ -16,6 +17,8 @@ except ImportError:
     TKINTER_AVAILABLE = False
 
 app = Flask(__name__)
+app.config['SECRET_KEY'] = 'ihts-chatbox-secret'
+socketio = SocketIO(app, cors_allowed_origins="*")
 
 # Configuration
 API_KEY = None
@@ -31,8 +34,18 @@ CHAT_HTML = """
 <head>
     <title>YouTube Live Chat</title>
     <style>
+        @font-face {
+            font-family: 'UbuntuNerdFontPropo-Light';
+            src: url('/static/UbuntuNerdFontPropo-Light.ttf') format('truetype');
+        }
+        
+        @font-face {
+            font-family: 'UbuntuNerdFont-Regular';
+            src: url('/static/UbuntuNerdFont-Regular.ttf') format('truetype');
+        }
+        
         body {
-            font-family: 'Segoe UI', Arial, sans-serif;
+            font-family: 'UbuntuNerdFontPropo-Light', 'Segoe UI', Arial, sans-serif;
             margin: 0;
             padding: 20px;
             background: transparent;
@@ -58,29 +71,41 @@ CHAT_HTML = """
         .username {
             color: #4A90E2;
             font-weight: bold;
+            font-family: 'UbuntuNerdFont-Regular', 'Segoe UI', Arial, sans-serif;
         }
         
         .username.moderator {
             color: #4A90E2;
+            font-family: 'UbuntuNerdFont-Regular', 'Segoe UI', Arial, sans-serif;
         }
         
         .username.owner {
             color: #4A90E2;
+            font-family: 'UbuntuNerdFont-Regular', 'Segoe UI', Arial, sans-serif;
         }
         
         .message-text {
             color: #00FFFF;
             margin-left: 5px;
+            font-family: 'UbuntuNerdFontPropo-Light', 'Segoe UI', Arial, sans-serif;
         }
         
         .moderator-badge {
             color: #4A90E2;
             font-weight: bold;
+            font-family: 'UbuntuNerdFont-Regular', 'Segoe UI', Arial, sans-serif;
         }
         
         .owner-badge {
             color: #4A90E2;
             font-weight: bold;
+            font-family: 'UbuntuNerdFont-Regular', 'Segoe UI', Arial, sans-serif;
+        }
+        
+        .superchat-badge {
+            color: #FFD700;
+            font-weight: bold;
+            font-family: 'UbuntuNerdFont-Regular', 'Segoe UI', Arial, sans-serif;
         }
         
         /* Custom scrollbar */
@@ -108,49 +133,55 @@ CHAT_HTML = """
         <!-- Messages will be inserted here -->
     </div>
     
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.7.2/socket.io.js"></script>
     <script>
-        function updateChat() {
-            fetch('/get_messages')
-                .then(response => response.json())
-                .then(data => {
-                    const container = document.getElementById('chatContainer');
-                    const wasAtBottom = container.scrollHeight - container.clientHeight <= container.scrollTop + 1;
-                    
-                    container.innerHTML = '';
-                    data.messages.forEach(message => {
-                        const messageDiv = document.createElement('div');
-                        messageDiv.className = 'message';
-                        
-                        let badge = '';
-                        let usernameClass = 'username';
-                        
-                        if (message.is_owner) {
-                            badge = ' <span class="owner-badge">(O)</span>';
-                            usernameClass += ' owner';
-                        } else if (message.is_moderator) {
-                            badge = ' <span class="moderator-badge">(M)</span>';
-                            usernameClass += ' moderator';
-                        }
-                        
-                        messageDiv.innerHTML = `
-                            <span class="${usernameClass}">${message.display_name}${badge}:</span>
-                            <span class="message-text">${message.text}</span>
-                        `;
-                        
-                        container.appendChild(messageDiv);
-                    });
-                    
-                    // Auto-scroll to bottom if user was already at bottom
-                    if (wasAtBottom) {
-                        container.scrollTop = container.scrollHeight;
-                    }
-                })
-                .catch(error => console.error('Error fetching messages:', error));
-        }
+        const socket = io();
         
-        // Update chat every 2 seconds
-        setInterval(updateChat, 2000);
-        updateChat(); // Initial load
+        socket.on('connect', function() {
+            console.log('Connected to server');
+        });
+        
+        socket.on('new_messages', function(data) {
+            const container = document.getElementById('chatContainer');
+            const wasAtBottom = container.scrollHeight - container.clientHeight <= container.scrollTop + 1;
+            
+            container.innerHTML = '';
+            data.messages.forEach(message => {
+                const messageDiv = document.createElement('div');
+                messageDiv.className = 'message';
+                
+                let badge = '';
+                let usernameClass = 'username';
+                
+                if (message.is_owner) {
+                    badge = ' <span class="owner-badge">(  )</span>';
+                    usernameClass += ' owner';
+                } else if (message.is_moderator) {
+                    badge = ' <span class="moderator-badge">(  )</span>';
+                    usernameClass += ' moderator';
+                }
+                
+                if (message.is_superchat) {
+                    badge += ' <span class="superchat-badge">(  )</span>';
+                }
+                
+                messageDiv.innerHTML = `
+                    <span class="${usernameClass}">${message.display_name}${badge}:</span>
+                    <span class="message-text">${message.text}</span>
+                `;
+                
+                container.appendChild(messageDiv);
+            });
+            
+            // Auto-scroll to bottom if user was already at bottom
+            if (wasAtBottom) {
+                container.scrollTop = container.scrollHeight;
+            }
+        });
+        
+        socket.on('disconnect', function() {
+            console.log('Disconnected from server');
+        });
     </script>
 </body>
 </html>
@@ -220,19 +251,27 @@ def fetch_chat_messages():
                 snippet = item['snippet']
                 author = item['authorDetails']
                 
+                # Check if it's a superchat
+                is_superchat = snippet.get('type') == 'superChatEvent'
+                
                 message = {
                     'display_name': author['displayName'],
-                    'text': snippet['displayMessage'],
+                    'text': snippet.get('superChatDetails', {}).get('userComment', snippet.get('displayMessage', '')),
                     'timestamp': snippet['publishedAt'],
                     'is_moderator': author.get('isChatModerator', False),
                     'is_owner': author.get('isChatOwner', False),
+                    'is_superchat': is_superchat,
                     'message_id': item['id']
                 }
                 new_messages.append(message)
             
             # Add new messages to the list (keep last 50 messages)
-            chat_messages.extend(new_messages)
-            chat_messages = chat_messages[-50:]  # Keep only last 50 messages
+            if new_messages:  # Only update if there are new messages
+                chat_messages.extend(new_messages)
+                chat_messages = chat_messages[-50:]  # Keep only last 50 messages
+                
+                # Emit new messages via WebSocket
+                socketio.emit('new_messages', {'messages': chat_messages})
             
             # Get next page token and polling interval
             next_page_token = data.get('nextPageToken')
@@ -334,6 +373,11 @@ def setup_chat():
     
     return True
 
+@socketio.on('connect')
+def handle_connect():
+    """Handle client connection"""
+    emit('new_messages', {'messages': chat_messages})
+
 @app.route('/')
 def chat_display():
     """Serve the chat display page"""
@@ -396,7 +440,7 @@ Options:
 
 Setup Instructions:
 1. Get YouTube Data API v3 key from Google Cloud Console
-2. Install required packages: pip install flask requests tkinter
+2. Install required packages: pip install flask requests flask-socketio
 3. Run this script
 4. Enter your API key and stream URL when prompted
 5. Open http://localhost:5000 in OBS browser source
@@ -449,7 +493,7 @@ def main():
     print("\nPress Ctrl+C to stop")
     
     try:
-        app.run(host='0.0.0.0', port=5000, debug=False)
+        socketio.run(app, host='0.0.0.0', port=5000, debug=False)
     except KeyboardInterrupt:
         print("\nShutting down...")
         is_running = False
