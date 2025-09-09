@@ -13,16 +13,16 @@ fuck it
 
 before running, do:
 ```
-pip install flask requests
+pip install flask requests flask-socketio
 ```
 and if on debian
 ```
-sudo apt install python3-requests python3-flask
+sudo apt install python3-requests python3-flask python3-flask-socketio
 ```
 ANY OTHER OS:
 ```
 # get pipx
-pipx install flask requests
+pipx install flask requests flask-socketio
 ```
 then
 ```
