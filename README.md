@@ -34,7 +34,7 @@ python ihts-chatbox.py
 # orhttps://github.com/MalikHw/ihts-chatbox-youtube
 python3 ihts-chatbox.py
 ```
-
+### btw colors r blue scheme and im tired of modifying shit 💀, want to change them either leave them or edit the code, imma add a ez personalizer when i feel like it 🥀
 ## How to obtain API key:
 
 [![Watch the video](https://img.youtube.com/vi/cQfJ7P0kMcA/maxresdefault.jpg)](https://youtu.be/cQfJ7P0kMcA)
