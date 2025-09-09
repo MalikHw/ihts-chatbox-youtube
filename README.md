@@ -37,10 +37,7 @@ python3 ihts-chatbox.py
 
 ## How to obtain API key:
 
-<video width="600" controls>
-  <source src="./api.mp4" type="video/mp4">
-  Your browser does not support the video tag.
-</video>
+[![Watch the video](https://img.youtube.com/vi/cQfJ7P0kMcA/maxresdefault.jpg)](https://youtu.be/cQfJ7P0kMcA)
 
 ## flags:
 `--info`, just visible info bruh
